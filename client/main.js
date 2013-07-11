@@ -29,6 +29,7 @@ define(function(require,exports,module){
 	require('events');
 	require('utility');
 	require('AES');
+    require('modules/user_info/UserData');
 
     window.JsonFormatter = {
         stringify: function (cipherParams) {

@@ -33,14 +33,15 @@ define(['jquery','underscore','backbone','client','regex',
 				namespace: this.channelName
 			});
 
-			this.chatLog = new ChatLog({
-				room: this.channelName,
-				persistentLog: this.persistentLog
-			});
-
 			this.me = new ClientModel({
 				socket: this.socket
 			});
+			this.chatLog = new ChatLog({
+				room: this.channelName,
+				persistentLog: this.persistentLog,
+				me: this.me
+			});
+
 			this.me.persistentLog = this.persistentLog;
 
 			this.listen();
