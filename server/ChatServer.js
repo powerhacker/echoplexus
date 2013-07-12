@@ -40,6 +40,7 @@ exports.ChatServer = function (sio, redisC, EventBus, Channels, ChannelModel) {
 	function updatePersistedMessage(room, mID, newMessage, callback) {
 		var mID = parseInt(mID, 10),
 			newBody = newMessage.body,
+			newEncryptedText,
 			alteredMsg;
 
 		// get the pure message
@@ -59,8 +60,10 @@ exports.ChatServer = function (sio, redisC, EventBus, Channels, ChannelModel) {
 				} // trying to edit something too far back in time
 			}
 
-
 			alteredMsg.body = newBody; // alter it
+			if (typeof newMessage.encrypted !== "undefined") {
+				alteredMsg.encrypted = newMessage.encrypted;
+			}
 
 			// overwrite the old message with the altered chat message
 			redisC.hset("chatlog:" + room, mID, JSON.stringify(alteredMsg), function (err, reply) {
@@ -215,9 +218,17 @@ exports.ChatServer = function (sio, redisC, EventBus, Channels, ChannelModel) {
 			"nickname": function (namespace, socket, channel, client, data, ack) {
 				var room = channel.get("name");
 
-				var newName = data.nickname.replace(REGEXES.commands.nick, "").trim(),
+				var newName = data.nick,
 					prevName = client.get("nick");
+
 				client.set("identified", false);
+				client.set("encrypted_nick", null);
+				client.unset("encrypted_nick");
+
+				if (typeof data.encrypted !== "undefined") {
+					newName = "-";
+					client.set("encrypted_nick", data.encrypted);
+				}
 
 				if (newName === "") {
 					socket.in(room).emit('chat:' + room, serverSentMessage({
@@ -226,6 +237,8 @@ exports.ChatServer = function (sio, redisC, EventBus, Channels, ChannelModel) {
 					}, room));
 					return;
 				}
+
+				console.log(newName);
 
 				client.set("nick", newName);
 				socket.in(room).broadcast.emit('chat:' + room, serverSentMessage({
@@ -325,6 +338,7 @@ exports.ChatServer = function (sio, redisC, EventBus, Channels, ChannelModel) {
 				if (data.body && data.directedAt) {
 					data.color = client.get("color").toRGB();
 					data.nickname = client.get("nick");
+					data.encrypted_nick = client.get("encrypted_nick");
 					data.timestamp = Number(new Date());
 					data.type = "private";
 					data.class = "private";
@@ -375,6 +389,7 @@ exports.ChatServer = function (sio, redisC, EventBus, Channels, ChannelModel) {
 				if (data.body) {
 					data.color = client.get("color").toRGB();
 					data.nickname = client.get("nick");
+					data.encrypted_nick = client.get("encrypted_nick");
 					data.timestamp = Number(new Date());
 					data.identified = client.get("identified");
 
