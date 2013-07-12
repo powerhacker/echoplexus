@@ -2,16 +2,16 @@
   // Set up Backbone appropriately for the environment.
   if (typeof exports !== 'undefined') {
     // Node/CommonJS, no need for jQuery in that case.
-    factory(exports,require('backbone'),require('underscore'),require('../client/regex.js').REGEXES, require('node-uuid'), require('../server/config.js').Configuration);
+    factory(exports,require('backbone'),require('underscore'),require('../client/regex.js').REGEXES, null, require('node-uuid'), require('../server/config.js').Configuration);
   } else if (typeof define === 'function' && define.amd) {
     // AMD
-    define(['underscore', 'backbone', 'regex', 'exports'], function(_, Backbone,Regex,exports) {
+    define(['underscore', 'backbone', 'regex', 'CryptoWrapper', 'exports'], function(_, Backbone,Regex, crypto, exports) {
       // Export global even in AMD case in case this script is loaded with
       // others that may still expect a global Backbone.
-      return factory(exports, Backbone, _,Regex.REGEXES);
+      return factory(exports, Backbone, _,Regex.REGEXES, crypto);
     });
   }
-})(this,function(exports,Backbone,_,REGEXES, uuid, config) {
+})(this,function(exports,Backbone,_,REGEXES, crypto, uuid, config) {
 
 	exports.ColorModel = Backbone.Model.extend({
 		defaults: {
@@ -176,27 +176,6 @@
 				this.set('idle',false);
 			}
 		},
-		decryptObject: function (encipheredObj, key) {
-			if (typeof encipheredObj !== "undefined") {
-				var decipheredString, decipheredObj;
-
-				// attempt to decrypt the result:
-				try {
-					decipheredObj = CryptoJS.AES.decrypt(JSON.stringify(encipheredObj), key, { format: JsonFormatter });
-					decipheredString = decipheredObj.toString(CryptoJS.enc.Utf8);
-				} catch (e) {
-					decipheredString = encipheredObj.ct;
-				}
-
-				if (decipheredString === "") {
-					decipheredString = encipheredObj.ct;
-				}
-
-				return decipheredString;
-			} else {
-				return "Unknown";
-			}
-		},
 		getNick: function (cryptoKey) {
 			var nick = this.get("nick"),
 				encrypted_nick = this.get("encrypted_nick");
@@ -204,27 +183,23 @@
 			if ((typeof cryptoKey !== "undefined") &&
 				(cryptoKey !== "") &&
 				(typeof encrypted_nick !== "undefined")) {
-				nick = this.decryptObject(encrypted_nick, cryptoKey);
+				nick = crypto.decryptObject(encrypted_nick, cryptoKey);
 			}
 
 			return nick;
 		},
 		setNick: function (nick, room, ack) {
-			var encipheredNick;
-
 			$.cookie("nickname:" + room, nick, window.COOKIE_OPTIONS);
 
 			if (this.cryptokey) {
-				var enciphered = CryptoJS.AES.encrypt(nick, this.cryptokey, { format: JsonFormatter });
+				this.set("encrypted_nick", crypto.encryptObject(nick, this.cryptokey));
 				nick = "-";
-				encipheredNick = JSON.parse(enciphered.toString());
-				this.set("encrypted_nick", encipheredNick);
 			}
 
 			this.set("nick", nick);
 			this.socket.emit('nickname:' + room, {
 				nick: nick,
-				encrypted: encipheredNick
+				encrypted_nick: this.get("encrypted_nick")
 			}, function () {
 				if (ack) {
 					ack.resolve();
@@ -346,9 +321,8 @@
 				};
 
 				if (this.cryptokey) {
-					var enciphered = CryptoJS.AES.encrypt(data.body, this.cryptokey, { format: JsonFormatter });
+					data.encrypted = crypto.encryptObject(data.body, this.cryptokey);
 					data.body = "-";
-					data.encrypted = JSON.parse(enciphered.toString());
 				}
 
 				socket.emit('chat:edit:' + room, data);
@@ -368,9 +342,8 @@
 			} else { // send it out to the world!
 
 				if (this.cryptokey) {
-					var enciphered = CryptoJS.AES.encrypt(msg.body, this.cryptokey, { format: JsonFormatter });
+					msg.encrypted = crypto.encryptObject(msg.body, this.cryptokey);
 					msg.body = "-";
-					msg.encrypted = JSON.parse(enciphered.toString());
 				}
 				socket.emit('chat:' + room, msg);
 			}
